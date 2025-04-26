@@ -56,6 +56,9 @@ int main(int argc, char *argv[])
 	int ssock;
 	int rport = 0;
 	int admin = 0;
+	int limit = QLEN;
+	char *limit_response = calloc(50, sizeof(char));
+	char *host_name;
 
 	switch (argc)
 	{
@@ -100,9 +103,22 @@ int main(int argc, char *argv[])
 		if (admin == 0)
 		{
 			write(ssock, "QS|ADMIN\r\n", 10);
+			admin ++ ;
+			read(ssock, limit_response, 49);
+			strtok(limit_response, "|");
+			host_name = strtok(NULL, "|");
+			limit = atoi(strtok(NULL, "|")) - 1;
+		}
+		else if (admin <= limit){
+			write(ssock, "QS|JOIN\r\n", 9);
+			admin ++ ;
+		}
+		else{
+			write(ssock, "QS|FULL\r\n", 9);
 		}
 
 		pthread_create(&thr, NULL, game, (void *)ssock);
 	}
+	free(limit_response);
 	pthread_exit(NULL);
 }
