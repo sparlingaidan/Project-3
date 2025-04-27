@@ -11,6 +11,7 @@
 
 #define QLEN 5
 #define BUFSIZE 4096
+pthread_barrier_t barrier;
 
 int passivesock(char *service, char *protocol, int qlen, int *rport);
 
@@ -24,6 +25,17 @@ void *game(void *s)
 	/* ECHO what the client says */
 	for (;;)
 	{
+		pthread_barrier_wait(&barrier);
+		printf("ask Questions n' such\n");
+
+		if ((cc = read(ssock, buf, BUFSIZE)) <= 0)
+		{
+			printf("The client has gone.\n");
+			close(ssock);
+			break;
+		}
+
+		/*
 		if ((cc = read(ssock, buf, BUFSIZE)) <= 0)
 		{
 			printf("The client has gone.\n");
@@ -36,11 +48,12 @@ void *game(void *s)
 			// printf( "The client says: %s\n", buf );
 			if (write(ssock, buf, cc) < 0)
 			{
-				/* This guy is dead */
+				/* This guy is dead */  /*
 				close(ssock);
 				break;
 			}
 		}
+		*/
 	}
 	pthread_exit(NULL);
 }
@@ -55,7 +68,7 @@ int main(int argc, char *argv[])
 	int msock;
 	int ssock;
 	int rport = 0;
-	int admin = 0;
+	int guest_num = 0;
 	int limit = QLEN;
 	char *limit_response = calloc(50, sizeof(char));
 	char *host_name;
@@ -99,24 +112,27 @@ int main(int argc, char *argv[])
 
 		printf("A client has arrived for echoes - serving on fd %d.\n", ssock);
 		fflush(stdout);
-
-		if (admin == 0)
+		
+		if (guest_num == 0)
 		{
 			write(ssock, "QS|ADMIN\r\n", 10);
-			admin ++ ;
+			guest_num ++ ;
 			read(ssock, limit_response, 49);
 			strtok(limit_response, "|");
 			host_name = strtok(NULL, "|");
-			limit = atoi(strtok(NULL, "|")) - 1;
+			limit = atoi(strtok(NULL, "|"));
+			pthread_barrier_init(&barrier, NULL, limit);
+			limit -- ;
 		}
-		else if (admin <= limit){
+		else if (guest_num <= limit){
 			write(ssock, "QS|JOIN\r\n", 9);
-			admin ++ ;
+			guest_num ++ ;
 		}
 		else{
 			write(ssock, "QS|FULL\r\n", 9);
+			continue;
 		}
-
+		write(ssock, "WAIT\r\n", 6);
 		pthread_create(&thr, NULL, game, (void *)ssock);
 	}
 	free(limit_response);
