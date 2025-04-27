@@ -17,20 +17,29 @@ int passivesock(char *service, char *protocol, int qlen, int *rport);
 
 void *playerManager(void *s)
 {
-	char buf[BUFSIZE];
 	int cc;
 	int ssock = (int)s;
+	char *questions = calloc(BUFSIZE, sizeof(char));
+	char *build_question = calloc(BUFSIZE, sizeof(char));
+	FILE *fptr = fopen("questions.txt", "r");
+	fgets(questions, BUFSIZE, fptr);
+	char *current_q = strtok(questions, "\n\n");
+	char *quest_pref = "QUES|\0";
+	char *num = calloc(5, sizeof(char));
 
 	/* start working for this guy */
 	/* ECHO what the client says */
 	for (;;)
 	{
 		pthread_barrier_wait(&barrier);
-		printf("Everyone's here");
-
-		if ((cc = read(ssock, buf, BUFSIZE)) <= 0)
+		strcpy(build_question, quest_pref);
+		cc = strlen(current_q);
+		sprintf(build_question + 5, "%d|", cc);
+		strcat(build_question, current_q);
+		printf("%s\n", build_question);
+		if (write(ssock, build_question, strlen(build_question)) < 0)
 		{
-			printf("The client has gone.\n");
+			/* This guy is dead */
 			close(ssock);
 			break;
 		}
@@ -48,13 +57,17 @@ void *playerManager(void *s)
 			// printf( "The client says: %s\n", buf );
 			if (write(ssock, buf, cc) < 0)
 			{
-				/* This guy is dead */  /*
-				close(ssock);
-				break;
-			}
-		}
-		*/
+				/* This guy is dead */
+		/*
+close(ssock);
+break;
+}
+}
+*/
 	}
+	free(questions);
+	free(num);
+	free(build_question);
 	pthread_exit(NULL);
 }
 
@@ -112,23 +125,25 @@ int main(int argc, char *argv[])
 
 		printf("A client has arrived for echoes - serving on fd %d.\n", ssock);
 		fflush(stdout);
-		
+
 		if (guest_num == 0)
 		{
 			write(ssock, "QS|ADMIN\r\n", 10);
-			guest_num ++ ;
+			guest_num++;
 			read(ssock, limit_response, 49);
 			strtok(limit_response, "|");
 			host_name = strtok(NULL, "|");
 			limit = atoi(strtok(NULL, "|"));
-			limit -- ;
 			pthread_barrier_init(&barrier, NULL, limit);
+			limit--;
 		}
-		else if (guest_num <= limit){
+		else if (guest_num <= limit)
+		{
 			write(ssock, "QS|JOIN\r\n", 9);
-			guest_num ++ ;
+			guest_num++;
 		}
-		else{
+		else
+		{
 			write(ssock, "QS|FULL\r\n", 9);
 			continue;
 		}
