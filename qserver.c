@@ -15,7 +15,7 @@ pthread_barrier_t barrier;
 
 int passivesock(char *service, char *protocol, int qlen, int *rport);
 
-void *game(void *s)
+void *playerManager(void *s)
 {
 	char buf[BUFSIZE];
 	int cc;
@@ -26,7 +26,7 @@ void *game(void *s)
 	for (;;)
 	{
 		pthread_barrier_wait(&barrier);
-		printf("ask Questions n' such\n");
+		printf("Everyone's here");
 
 		if ((cc = read(ssock, buf, BUFSIZE)) <= 0)
 		{
@@ -121,8 +121,8 @@ int main(int argc, char *argv[])
 			strtok(limit_response, "|");
 			host_name = strtok(NULL, "|");
 			limit = atoi(strtok(NULL, "|"));
-			pthread_barrier_init(&barrier, NULL, limit);
 			limit -- ;
+			pthread_barrier_init(&barrier, NULL, limit);
 		}
 		else if (guest_num <= limit){
 			write(ssock, "QS|JOIN\r\n", 9);
@@ -133,7 +133,7 @@ int main(int argc, char *argv[])
 			continue;
 		}
 		write(ssock, "WAIT\r\n", 6);
-		pthread_create(&thr, NULL, game, (void *)ssock);
+		pthread_create(&thr, NULL, playerManager, (void *)ssock);
 	}
 	free(limit_response);
 	pthread_exit(NULL);
