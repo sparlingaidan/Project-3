@@ -15,35 +15,53 @@ pthread_barrier_t barrier;
 
 int passivesock(char *service, char *protocol, int qlen, int *rport);
 
+char *questionBuilder(int questionNumber, char *questions)
+{
+	char *beginingOfQ = strchr(questions, questionNumber + 48);
+	char *question = calloc(BUFSIZE, sizeof(char));
+	strcpy(question,"QUES|\0");
+	char *nextQuestion = strchr(questions, questionNumber + 49);
+	char *questionEnd = nextQuestion - 4;
+	*questionEnd = NULL;
+	int sizeOfQuestion = strlen(beginingOfQ);
+	sprintf(question + 5, "%d|", sizeOfQuestion);
+	strcat(question, beginingOfQ);
+	return question;
+}
+
 void *playerManager(void *s)
 {
 	int cc;
 	int ssock = (int)s;
 	char *questions = calloc(BUFSIZE, sizeof(char));
-	char *build_question = calloc(BUFSIZE, sizeof(char));
+	char *response = calloc(BUFSIZE, sizeof(char));
 	FILE *fptr = fopen("questions.txt", "r");
-	fgets(questions, BUFSIZE, fptr);
-	char *current_q = strtok(questions, "\n\n");
-	char *quest_pref = "QUES|\0";
+	fread(questions,sizeof(char), BUFSIZE - 1, fptr);
 	char *num = calloc(5, sizeof(char));
+	int currentQ = 1;
 
 	/* start working for this guy */
 	/* ECHO what the client says */
 	for (;;)
 	{
-		pthread_barrier_wait(&barrier);
-		strcpy(build_question, quest_pref);
-		cc = strlen(current_q);
-		sprintf(build_question + 5, "%d|", cc);
-		strcat(build_question, current_q);
-		printf("%s\n", build_question);
-		if (write(ssock, build_question, strlen(build_question)) < 0)
+		pthread_barrier_wait(&barrier); // wiat for everyone
+		char *question = questionBuilder(currentQ, questions);
+		printf("%s\n", question);
+
+		if (write(ssock, question, strlen(question)) < 0)
 		{
 			/* This guy is dead */
 			close(ssock);
 			break;
 		}
-
+		free(question);
+		sleep(120);
+		if ((cc = read(ssock, response, BUFSIZE)) <= 0)
+		{
+			printf("The client has gone.\n");
+			close(ssock);
+			break;
+		}
 		/*
 		if ((cc = read(ssock, buf, BUFSIZE)) <= 0)
 		{
@@ -67,7 +85,6 @@ break;
 	}
 	free(questions);
 	free(num);
-	free(build_question);
 	pthread_exit(NULL);
 }
 

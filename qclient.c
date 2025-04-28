@@ -57,7 +57,6 @@ void process_a_question( int sock, char *buf )
 	t2 = strtok( NULL, "|" );
 	t3 = strtok( NULL, "|" );
 	len = atoi(t2);
-	printf("%d %s\n", len, t3);
 
 	// If less than, I should actually keep reading
 	if (strlen(t3) != len)
