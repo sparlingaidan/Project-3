@@ -15,17 +15,38 @@ pthread_barrier_t barrier;
 
 int passivesock(char *service, char *protocol, int qlen, int *rport);
 
+char *getCorrectAns(int questionNumber, char *questions)
+{
+	char *beginingOfQ = strchr(questions, questionNumber + 48);
+	char *correctAns = calloc(250, sizeof(char));
+	char *nextQuestion = strchr(questions, questionNumber + 49);
+	char *questionEnd;
+	if (nextQuestion == NULL){
+		questionEnd = beginingOfQ + strlen(beginingOfQ) - 3;
+	}
+	else{
+		questionEnd = nextQuestion - 3;
+	}
+	strncpy(correctAns, questionEnd, 3);
+	return correctAns;
+}
+
 char *questionBuilder(int questionNumber, char *questions)
 {
 	char *beginingOfQ = strchr(questions, questionNumber + 48);
 	char *question = calloc(BUFSIZE, sizeof(char));
 	strcpy(question,"QUES|\0");
 	char *nextQuestion = strchr(questions, questionNumber + 49);
-	char *questionEnd = nextQuestion - 4;
-	*questionEnd = NULL;
-	int sizeOfQuestion = strlen(beginingOfQ);
+	char *questionEnd;
+	if (nextQuestion == NULL){
+		questionEnd = beginingOfQ + strlen(beginingOfQ) - 4;
+	}
+	else{
+		questionEnd = nextQuestion - 4;
+	}
+	int sizeOfQuestion = questionEnd - beginingOfQ;
 	sprintf(question + 5, "%d|", sizeOfQuestion);
-	strcat(question, beginingOfQ);
+	strncat(question, beginingOfQ, sizeOfQuestion);
 	return question;
 }
 
@@ -46,7 +67,6 @@ void *playerManager(void *s)
 	{
 		pthread_barrier_wait(&barrier); // wiat for everyone
 		char *question = questionBuilder(currentQ, questions);
-		printf("%s\n", question);
 
 		if (write(ssock, question, strlen(question)) < 0)
 		{
@@ -55,33 +75,17 @@ void *playerManager(void *s)
 			break;
 		}
 		free(question);
-		sleep(120);
 		if ((cc = read(ssock, response, BUFSIZE)) <= 0)
 		{
 			printf("The client has gone.\n");
 			close(ssock);
 			break;
 		}
-		/*
-		if ((cc = read(ssock, buf, BUFSIZE)) <= 0)
-		{
-			printf("The client has gone.\n");
-			close(ssock);
-			break;
-		}
-		else
-		{
-			buf[cc] = '\0';
-			// printf( "The client says: %s\n", buf );
-			if (write(ssock, buf, cc) < 0)
-			{
-				/* This guy is dead */
-		/*
-close(ssock);
-break;
-}
-}
-*/
+		char *correctAnswer = getCorrectAns(currentQ, questions);
+		printf("%s-\n", response);
+		int rightWrong = strncmp(response + 4,correctAnswer, sizeof(char));
+		printf("rw=%d", rightWrong);
+		sleep(120);
 	}
 	free(questions);
 	free(num);
