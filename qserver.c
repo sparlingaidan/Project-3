@@ -27,7 +27,7 @@ char *getCorrectAns(int questionNumber, char *questions)
 	else{
 		questionEnd = nextQuestion - 3;
 	}
-	strncpy(correctAns, questionEnd, 3);
+	strncpy(correctAns, questionEnd, 1);
 	return correctAns;
 }
 
@@ -67,6 +67,7 @@ void *playerManager(void *s)
 	{
 		pthread_barrier_wait(&barrier); // wiat for everyone
 		char *question = questionBuilder(currentQ, questions);
+		int score;
 
 		if (write(ssock, question, strlen(question)) < 0)
 		{
@@ -82,9 +83,13 @@ void *playerManager(void *s)
 			break;
 		}
 		char *correctAnswer = getCorrectAns(currentQ, questions);
-		printf("%s-\n", response);
-		int rightWrong = strncmp(response + 4,correctAnswer, sizeof(char));
-		printf("rw=%d", rightWrong);
+		int rightWrong = strncmp((response + 4), correctAnswer, 1);
+		if (rightWrong == 0){
+			score = 1;
+		}
+		else{
+			score = 0;
+		}
 		sleep(120);
 	}
 	free(questions);
