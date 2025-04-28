@@ -109,8 +109,8 @@ int main(int argc, char *argv[])
 	int rport = 0;
 	int guest_num = 0;
 	int limit = QLEN;
-	char *limit_response = calloc(50, sizeof(char));
-	char *host_name;
+	char *init_response = calloc(50, sizeof(char));
+	char *player_name;
 
 	switch (argc)
 	{
@@ -156,9 +156,9 @@ int main(int argc, char *argv[])
 		{
 			write(ssock, "QS|ADMIN\r\n", 10);
 			guest_num++;
-			read(ssock, limit_response, 49);
-			strtok(limit_response, "|");
-			host_name = strtok(NULL, "|");
+			read(ssock, init_response, 49);
+			strtok(init_response, "|");
+			player_name = strtok(NULL, "|");
 			limit = atoi(strtok(NULL, "|"));
 			pthread_barrier_init(&barrier, NULL, limit);
 			limit--;
@@ -167,6 +167,9 @@ int main(int argc, char *argv[])
 		{
 			write(ssock, "QS|JOIN\r\n", 9);
 			guest_num++;
+			read(ssock, init_response, 49);
+			strtok(init_response, "|");
+			player_name = strtok(NULL, "|");
 		}
 		else
 		{
@@ -176,6 +179,6 @@ int main(int argc, char *argv[])
 		write(ssock, "WAIT\r\n", 6);
 		pthread_create(&thr, NULL, playerManager, (void *)ssock);
 	}
-	free(limit_response);
+	free(init_response);
 	pthread_exit(NULL);
 }
