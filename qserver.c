@@ -13,6 +13,12 @@
 #define BUFSIZE 4096
 pthread_barrier_t barrier;
 
+typedef struct args
+{
+  int *ssock;
+  char *name;
+} arg_t;
+
 int passivesock(char *service, char *protocol, int qlen, int *rport);
 
 char *getCorrectAns(int questionNumber, char *questions)
@@ -50,10 +56,11 @@ char *questionBuilder(int questionNumber, char *questions)
 	return question;
 }
 
-void *playerManager(void *s)
+void *playerManager(void *args)
 {
+	arg_t *_args = (arg_t *) args;
 	int cc;
-	int ssock = (int)s;
+	int ssock = (int)*_args->ssock;
 	char *questions = calloc(BUFSIZE, sizeof(char));
 	char *response = calloc(BUFSIZE, sizeof(char));
 	FILE *fptr = fopen("questions.txt", "r");
@@ -141,6 +148,7 @@ int main(int argc, char *argv[])
 	{
 		int ssock;
 		pthread_t thr;
+		arg_t args;
 
 		ssock = accept(msock, (struct sockaddr *)&fsin, &alen);
 		if (ssock < 0)
@@ -162,6 +170,9 @@ int main(int argc, char *argv[])
 			limit = atoi(strtok(NULL, "|"));
 			pthread_barrier_init(&barrier, NULL, limit);
 			limit--;
+			args.ssock = &ssock;
+			player_name = calloc(50, sizeof(char));
+			args.name = &player_name;
 		}
 		else if (guest_num <= limit)
 		{
@@ -170,6 +181,9 @@ int main(int argc, char *argv[])
 			read(ssock, init_response, 49);
 			strtok(init_response, "|");
 			player_name = strtok(NULL, "|");
+			args.ssock = &ssock;
+			player_name = calloc(50, sizeof(char));
+			args.name = &player_name;
 		}
 		else
 		{
@@ -177,7 +191,7 @@ int main(int argc, char *argv[])
 			continue;
 		}
 		write(ssock, "WAIT\r\n", 6);
-		pthread_create(&thr, NULL, playerManager, (void *)ssock);
+		pthread_create(&thr, NULL, playerManager, (void *)&args);
 	}
 	free(init_response);
 	pthread_exit(NULL);
