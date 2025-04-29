@@ -31,14 +31,25 @@ void *playerManager(void *args)
 	arg_t *_args = (arg_t *)args;
 	int cc;
 	int ssock = (int)_args->ssock;
-	char nameAgain[50];
+	char *padding = malloc(BUFSIZE);
+	char *padding1 = malloc(BUFSIZE);
+	char *padding2 = malloc(BUFSIZE);
+
+	char *nameAgain = malloc(BUFSIZE);
+
+	char *padding3 = malloc(BUFSIZE);
+	char *padding4 = malloc(BUFSIZE);
+	char *padding5 = malloc(BUFSIZE);
+
 	strcpy(nameAgain, _args->name);
 	char response[BUFSIZE];
+	printf("name1=%s\n", nameAgain);
 	int currentQ = 0;
 	int semVal;
 	ques_t *questions;
 	
 	read_questions("questions.txt", &questions);
+	printf("name after read questions=%s\n", nameAgain);
 
 	/* start working for this guy */
 	for (;;)
@@ -55,10 +66,9 @@ void *playerManager(void *args)
 		{
 			sem_wait(&sem);
 		}
-		printf("name1=%s\n", nameAgain);
 		strncpy(response, "QUES|1|1\n", 6);
 		sprintf(response + 5, "%ld|", strlen(questions[currentQ].qtext));
-		strcat(response, questions[currentQ].qtext);
+		strncat(response, questions[currentQ].qtext, strlen(questions[currentQ].qtext));
 
 		if (write(ssock, response, strlen(response)) < 0)
 		{
