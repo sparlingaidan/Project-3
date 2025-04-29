@@ -31,31 +31,24 @@ void *playerManager(void *args)
 	arg_t *_args = (arg_t *)args;
 	int cc;
 	int ssock = (int)_args->ssock;
-	char *padding = malloc(BUFSIZE);
-	char *padding1 = malloc(BUFSIZE);
-	char *padding2 = malloc(BUFSIZE);
-
 	char *nameAgain = malloc(BUFSIZE);
-
-	char *padding3 = malloc(BUFSIZE);
-	char *padding4 = malloc(BUFSIZE);
-	char *padding5 = malloc(BUFSIZE);
-
 	strcpy(nameAgain, _args->name);
 	char response[BUFSIZE];
 	printf("name1=%s\n", nameAgain);
 	int currentQ = 0;
 	int semVal;
-	ques_t *questions;
+	ques_t *questions[QLEN];
 	
-	read_questions("questions.txt", &questions);
+	read_questions("questions.txt", questions);
 	printf("name after read questions=%s\n", nameAgain);
+	printf("Question=%s", questions[1]->qtext);
+	fflush(stdout);
 
 	/* start working for this guy */
 	for (;;)
 	{
 		pthread_barrier_wait(&question_barrier); // wait for everyone
-		if (questions[currentQ].qtext == NULL)
+		if (questions[currentQ]->qtext == NULL)
 		{ // Quiz has ended.
 			printf("Quiz has ended.\n");
 			break;
@@ -67,8 +60,8 @@ void *playerManager(void *args)
 			sem_wait(&sem);
 		}
 		strncpy(response, "QUES|1|1\n", 6);
-		sprintf(response + 5, "%ld|", strlen(questions[currentQ].qtext));
-		strncat(response, questions[currentQ].qtext, strlen(questions[currentQ].qtext));
+		sprintf(response + 5, "%ld|", strlen(questions[currentQ]->qtext));
+		strncat(response, questions[currentQ]->qtext, strlen(questions[currentQ]->qtext));
 
 		if (write(ssock, response, strlen(response)) < 0)
 		{
@@ -82,7 +75,7 @@ void *playerManager(void *args)
 			close(ssock);
 			break;
 		}
-		int rightWrong = strncmp((response + 4), questions[currentQ].answer, 1);
+		int rightWrong = strncmp((response + 4), questions[currentQ]->answer, 1);
 		sem_getvalue(&sem, &semVal);
 		if ((rightWrong == 0) & (semVal == 1)) // correct answer
 		{
