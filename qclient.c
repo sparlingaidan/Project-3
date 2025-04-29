@@ -45,6 +45,7 @@ void process_a_question( int sock, char *buf )
 {
 	char *t1, *t2, *t3;
 	int len;
+	printf("q=%s\n", buf);
 	t1 = strtok( buf, "|" );
 	if ( strcmp(t1, "QUES") != 0 )
 	{

@@ -9,6 +9,7 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <qserver.h>
 
 #define QLEN 5
 #define BUFSIZE 4096
@@ -16,103 +17,67 @@ pthread_barrier_t question_barrier;
 pthread_barrier_t answer_barrier;
 sem_t sem;
 
-typedef struct playerState
+typedef struct argss
 {
-	int score;
-	char *name;
-} playerState_t;
-
-typedef struct args
-{
-	int *ssock;
-	char *name;
-	char *qwin;
-	playerState_t *playersState;
+	int ssock;
+	char name[50];
 } arg_t;
 
 int passivesock(char *service, char *protocol, int qlen, int *rport);
-
-char *getCorrectAns(int questionNumber, char *questions)
-{
-	char *beginingOfQ = strchr(questions, questionNumber + 48);
-	char *correctAns = calloc(250, sizeof(char));
-	char *nextQuestion = strchr(questions, questionNumber + 49);
-	char *questionEnd;
-	if (nextQuestion == NULL)
-	{
-		questionEnd = beginingOfQ + strlen(beginingOfQ) - 3;
-	}
-	else
-	{
-		questionEnd = nextQuestion - 3;
-	}
-	strncpy(correctAns, questionEnd, 1);
-	return correctAns;
-}
-
-char *questionBuilder(int questionNumber, char *questions)
-{
-	char *beginingOfQ = strchr(questions, questionNumber + 48);
-	char *question = calloc(BUFSIZE, sizeof(char));
-	strcpy(question, "QUES|\0");
-	char *nextQuestion = strchr(questions, questionNumber + 49);
-	char *questionEnd;
-	if (nextQuestion == NULL)
-	{
-		questionEnd = beginingOfQ + strlen(beginingOfQ) - 4;
-	}
-	else
-	{
-		questionEnd = nextQuestion - 4;
-	}
-	int sizeOfQuestion = questionEnd - beginingOfQ;
-	sprintf(question + 5, "%d|", sizeOfQuestion);
-	strncat(question, beginingOfQ, sizeOfQuestion);
-	return question;
-}
+void read_questions(char *qfile, ques_t *q[]);
 
 void *playerManager(void *args)
 {
 	arg_t *_args = (arg_t *)args;
 	int cc;
-	int ssock = (int)*_args->ssock;
-	char *questions = calloc(BUFSIZE, sizeof(char));
+	int ssock = (int)_args->ssock;
+	char *name = _args->name;
 	char *response = calloc(BUFSIZE, sizeof(char));
-	FILE *fptr = fopen("questions.txt", "r");
-	fread(questions, sizeof(char), BUFSIZE - 1, fptr);
 	char *num = calloc(5, sizeof(char));
-	int currentQ = 1;
+	int currentQ = 0;
 	int semVal;
+	ques_t *questions;
+	read_questions("questions.txt", &questions);
 
 	/* start working for this guy */
-	/* ECHO what the client says */
 	for (;;)
 	{
 		pthread_barrier_wait(&question_barrier); // wait for everyone
-		char *question = questionBuilder(currentQ, questions);
 		int score;
+		if (questions[currentQ].qtext == NULL)
+		{ // Quiz has ended.
+			printf("Quiz has ended.\n");
+			break;
+		}
 
-		if (write(ssock, question, strlen(question)) < 0)
+		sem_getvalue(&sem, &semVal);
+		if (semVal != 1)
+		{
+			sem_wait(&sem);
+		}
+		strcpy(response, "QUES|");
+		sprintf(response + 5, "%ld|", strlen(questions[currentQ].qtext));
+		strcat(response, questions[currentQ].qtext);
+		if (write(ssock, response, strlen(response)) < 0)
 		{
 			/* This guy is dead */
 			close(ssock);
 			break;
 		}
-		free(question);
 		if ((cc = read(ssock, response, BUFSIZE)) <= 0)
 		{
 			printf("The client has gone.\n");
 			close(ssock);
 			break;
 		}
-		char *correctAnswer = getCorrectAns(currentQ, questions);
-		int rightWrong = strncmp((response + 4), correctAnswer, 1);
+		int rightWrong = strncmp((response + 4), questions[currentQ].answer, 1);
 		sem_getvalue(&sem, &semVal);
-		if ((rightWrong == 0) & (semVal == 1))
+		if ((rightWrong == 0) & (semVal == 1)) // correct answer
 		{
+			printf("in right%s\n", name);
 			sem_post(&sem);
-			_args->playersState->score++;
-			strcpy(_args->qwin + 4, _args->name);
+			strcpy(response, "WIN|");
+			strcat(response, name);
 			pthread_barrier_wait(&answer_barrier); // wait for everyone
 		}
 		else
@@ -122,24 +87,22 @@ void *playerManager(void *args)
 
 		// If nobody was right
 		sem_getvalue(&sem, &semVal);
+		// printf("name=%s semval=%d\n", name, semVal);
 		if (semVal == 1)
 		{
-			strncpy(_args->qwin + 4, "\n\0", 2);
-		}
-		else //someone was right reset for next round.
-		{
-			sem_wait(&sem);
+			strcpy(response, "WIN|\n\0");
 		}
 
 		// Broadcast winner
-		if (write(ssock, _args->qwin, strlen(_args->qwin)) < 0)
+
+		if (write(ssock, response, strlen(response)) < 0)
 		{
 			/* This guy is dead */
 			close(ssock);
 			break;
 		}
+		currentQ++;
 	}
-	free(questions);
 	free(num);
 	pthread_exit(NULL);
 }
@@ -156,11 +119,6 @@ int main(int argc, char *argv[])
 	int rport = 0;
 	int guest_num = 0;
 	int limit = QLEN;
-	char *init_response = calloc(50, sizeof(char));
-	char *qwinner = calloc(50, sizeof(char));
-	strncpy(qwinner, "WIN|\n", 5);
-	char *player_name;
-	playerState_t *gameState;
 
 	switch (argc)
 	{
@@ -191,11 +149,12 @@ int main(int argc, char *argv[])
 	{
 		int ssock;
 		pthread_t thr;
-		arg_t args;
 		int inital_score = 0;
-		args.qwin = qwinner; // same for everyone.
-
+		arg_t *args = calloc(1, sizeof(arg_t));
 		ssock = accept(msock, (struct sockaddr *)&fsin, &alen);
+
+		char init_response[50];
+		char *player_name;
 		if (ssock < 0)
 		{
 			fprintf(stderr, "accept: %s\n", strerror(errno));
@@ -213,31 +172,22 @@ int main(int argc, char *argv[])
 			strtok(init_response, "|");
 			player_name = strtok(NULL, "|");
 			limit = atoi(strtok(NULL, "|")); // limit is the number of players
-			gameState = calloc(limit, sizeof(playerState_t));
 			pthread_barrier_init(&question_barrier, NULL, limit);
 			pthread_barrier_init(&answer_barrier, NULL, limit);
 			sem_init(&sem, 0, 1);
 			limit--;
-			args.ssock = &ssock;
-			args.playersState = gameState;
-			args.playersState->score = 0;
-			player_name = strdup(player_name);
-			args.playersState->name = player_name;
-			args.name = player_name;
+			strcpy(args->name, player_name);
+			args->ssock = ssock;
 		}
 		else if (guest_num <= limit)
 		{
+			guest_num++;
 			write(ssock, "QS|JOIN\r\n", 9);
 			read(ssock, init_response, 49);
 			strtok(init_response, "|");
 			player_name = strtok(NULL, "|");
-			args.ssock = &ssock;
-			args.playersState = &gameState[guest_num];
-			args.playersState->score = 0;
-			player_name = strdup(player_name);
-			args.playersState->name = player_name;
-			args.name = player_name;
-			guest_num++;
+			strcpy(args->name, player_name);
+			args->ssock = ssock;
 		}
 		else
 		{
@@ -245,8 +195,8 @@ int main(int argc, char *argv[])
 			continue;
 		}
 		write(ssock, "WAIT\r\n", 6);
-		pthread_create(&thr, NULL, playerManager, (void *)&args);
+		pthread_create(&thr, NULL, playerManager, (void *)args);
+		pthread_detach(thr);
 	}
-	free(init_response);
 	pthread_exit(NULL);
 }
