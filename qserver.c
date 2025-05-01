@@ -21,13 +21,13 @@ char winner[BUFSIZE];
 int winnerList[50] = {0};
 int correct = 0;
 char playerList[BUFSIZE];
-ques_t *questions[QLEN];
+ques_t *questions[25];
 int numplayers;
 
 typedef struct argss
 {
 	int ssock;
-	char name[50];
+	char name[200];
 	int playerNum;
 } arg_t;
 
@@ -60,8 +60,10 @@ void *playerManager(void *args)
 	int ssock = (int)_args->ssock;
 	char *nameAgain = malloc(BUFSIZE);
 	strcpy(nameAgain, _args->name);
+	pthread_mutex_lock(&lock); 
 	strcat(playerList, nameAgain);
 	strcat(playerList, "|");
+	pthread_mutex_unlock(&lock);
 	char response[BUFSIZE];
 	printf("name1=%s\n", nameAgain);
 	int currentQ = 0;
@@ -111,6 +113,10 @@ void *playerManager(void *args)
 			sem_post(&sem);
 			strcpy(winner, "WIN|");
 			strcat(winner, nameAgain);
+			winnerList[playerNumber-1]  = winnerList[playerNumber-1] + 2;
+			pthread_barrier_wait(&answer_barrier); // wait for everyone
+		}
+		else if (rightWrong == 0){
 			winnerList[playerNumber-1]  = winnerList[playerNumber-1] + 1;
 			pthread_barrier_wait(&answer_barrier); // wait for everyone
 		}
@@ -207,7 +213,7 @@ int main(int argc, char *argv[])
 			read(ssock, init_response, 49);
 			strtok(init_response, "|");
 			player_name = strtok(NULL, "|");
-			limit = atoi(strtok(NULL, "|")); // limit is the number of players
+			limit = atoi(strtok(NULL, "\r\n")); // limit is the number of players
 			numplayers = limit;
 			pthread_barrier_init(&question_barrier, NULL, limit);
 			pthread_barrier_init(&answer_barrier, NULL, limit);
@@ -223,7 +229,7 @@ int main(int argc, char *argv[])
 			write(ssock, "QS|JOIN\r\n", 9);
 			read(ssock, init_response, 49);
 			strtok(init_response, "|");
-			player_name = strtok(NULL, "|");
+			player_name = strtok(NULL, "\r\n");
 			strcpy(args[guest_num].name, player_name);
 			args[guest_num].ssock = ssock;
 			args[guest_num].playerNum = guest_num;
