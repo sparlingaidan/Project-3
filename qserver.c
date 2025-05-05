@@ -58,6 +58,29 @@ char *getscores()
 	return results;
 }
 
+void barrier(){
+	// wait for everyone
+	pthread_mutex_lock(&mutex);
+	waiting++;
+	if (waiting == numactiveplayers)
+	{
+		pthread_cond_broadcast(&cond);
+	}
+	while (waiting != numactiveplayers)
+	{
+		pthread_cond_wait(&cond, &mutex);
+	}
+	pthread_mutex_unlock(&mutex);
+	pthread_mutex_lock(&lock);
+	through++;
+	if (through == numactiveplayers)
+	{
+		waiting = 0;
+		through = 0;
+	}
+	pthread_mutex_unlock(&lock);
+}
+
 void *playerManager(void *args)
 {
 	arg_t *_args = (arg_t *)args;
@@ -78,26 +101,7 @@ void *playerManager(void *args)
 	/* start working for this guy */
 	for (;;)
 	{
-		// wait for everyone
-		pthread_mutex_lock(&mutex);
-		waiting++;
-		if (waiting == numactiveplayers)
-		{
-			pthread_cond_broadcast(&cond);
-		}
-		while (waiting != numactiveplayers)
-		{
-			pthread_cond_wait(&cond, &mutex);
-		}
-		pthread_mutex_unlock(&mutex);
-		pthread_mutex_lock(&lock);
-		through++;
-		if (through == numactiveplayers)
-		{
-			waiting = 0;
-			through = 0;
-		}
-		pthread_mutex_unlock(&lock);
+		barrier();
 
 		if (questions[currentQ]->qtext == NULL)
 		{ // Quiz has ended.
@@ -142,73 +146,17 @@ void *playerManager(void *args)
 			strcpy(winner, "WIN|");
 			strcat(winner, nameAgain);
 			winnerList[playerNumber - 1] = winnerList[playerNumber - 1] + 2;
-			// wait for everyone
-			pthread_mutex_lock(&mutex);
-			waiting++;
-			if (waiting == numactiveplayers)
-			{
-				pthread_cond_broadcast(&cond);
-			}
-			while (waiting != numactiveplayers)
-			{
-				pthread_cond_wait(&cond, &mutex);
-			}
-			pthread_mutex_unlock(&mutex);
-			pthread_mutex_lock(&lock);
-			through++;
-			if (through == numactiveplayers)
-			{
-				waiting = 0;
-				through = 0;
-			}
-			pthread_mutex_unlock(&lock);
+			barrier();
+
 		}
-		else if (strncmp((response + 4), "n", 1))
+		else if (strncmp((response + 4), "n", 1) == 0)
 		{
-			// wait for everyone
-			pthread_mutex_lock(&mutex);
-			waiting++;
-			if (waiting == numactiveplayers)
-			{
-				pthread_cond_broadcast(&cond);
-			}
-			while (waiting != numactiveplayers)
-			{
-				pthread_cond_wait(&cond, &mutex);
-			}
-			pthread_mutex_unlock(&mutex);
-			pthread_mutex_lock(&lock);
-			through++;
-			if (through == numactiveplayers)
-			{
-				waiting = 0;
-				through = 0;
-			}
-			pthread_mutex_unlock(&lock);
+			barrier();
 		}
 		else
 		{
 			winnerList[playerNumber - 1] = winnerList[playerNumber - 1] + 1;
-			// wait for everyone
-			pthread_mutex_lock(&mutex);
-			waiting++;
-			if (waiting == numactiveplayers)
-			{
-				pthread_cond_broadcast(&cond);
-			}
-			while (waiting != numactiveplayers)
-			{
-				pthread_cond_wait(&cond, &mutex);
-			}
-			pthread_mutex_unlock(&mutex);
-			pthread_mutex_lock(&lock);
-			through++;
-			if (through == numactiveplayers)
-			{
-				waiting = 0;
-				through = 0;
-			}
-			pthread_mutex_unlock(&lock);
+			barrier();
 		}
 
 		// If nobody was right
