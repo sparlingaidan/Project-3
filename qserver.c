@@ -13,11 +13,10 @@
 
 #define QLEN 5
 #define BUFSIZE 4096
-pthread_barrier_t question_barrier;
-pthread_barrier_t answer_barrier;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 sem_t sem;
+sem_t gameEnd;
 pthread_mutex_t lock;
 char winner[BUFSIZE];
 int winnerList[50] = {0};
@@ -41,7 +40,6 @@ void read_questions(char *qfile, ques_t *q[]);
 
 char *getscores()
 {
-	printf("%s\n", playerList);
 	char *results = calloc(50, sizeof(char));
 	strncpy(results, "RESULTS|1|1\n", 8);
 	int offset = 8;
@@ -51,10 +49,8 @@ char *getscores()
 	{
 		int score = winnerList[i];
 		offset += sprintf(results + offset, "%s|%d|", playerName, score);
-		printf("player = %s score = %d\n", playerName, score);
 		playerName = strtok(NULL, "|");
 	}
-	printf("res=%s\n", results);
 	return results;
 }
 
@@ -94,7 +90,6 @@ void *playerManager(void *args)
 	strcat(playerList, "|");
 	pthread_mutex_unlock(&lock);
 	char response[BUFSIZE];
-	printf("name1=%s\n", nameAgain);
 	int currentQ = 0;
 	int semVal;
 
@@ -110,6 +105,7 @@ void *playerManager(void *args)
 			pthread_mutex_unlock(&lock);
 			write(ssock, results, strlen(results));
 			printf("Quiz has ended.\n");
+			sem_post(&gameEnd);
 			break;
 		}
 
@@ -182,7 +178,7 @@ void *playerManager(void *args)
 
 /*
  */
-int main(int argc, char *argv[])
+int gametime(int argc, char *argv[])
 {
 	char *service;
 	struct sockaddr_in fsin;
@@ -195,6 +191,8 @@ int main(int argc, char *argv[])
 	arg_t *args = calloc(10, sizeof(arg_t));
 	read_questions(argv[1], questions);
 	pthread_mutex_init(&lock, NULL);
+	sem_init(&gameEnd, 0, 0);
+
 
 	switch (argc)
 	{
@@ -226,6 +224,11 @@ int main(int argc, char *argv[])
 		int ssock;
 		pthread_t thr;
 		int inital_score = 0;
+
+		if (guest_num > limit){
+			sem_wait(&gameEnd);
+			break;
+		}
 		ssock = accept(msock, (struct sockaddr *)&fsin, &alen);
 
 		char init_response[50];
@@ -249,8 +252,6 @@ int main(int argc, char *argv[])
 			limit = atoi(strtok(NULL, "\r\n")); // limit is the number of players
 			numplayers = limit;
 			numactiveplayers = limit;
-			pthread_barrier_init(&question_barrier, NULL, limit);
-			pthread_barrier_init(&answer_barrier, NULL, limit);
 			sem_init(&sem, 0, 1);
 			limit--;
 			strcpy(args[guest_num].name, player_name);
@@ -277,5 +278,16 @@ int main(int argc, char *argv[])
 		pthread_create(&thr, NULL, playerManager, (void *)&args[guest_num]);
 		pthread_detach(thr);
 	}
-	pthread_exit(NULL);
+	guest_num = 0;
+	memset(winnerList, 0, sizeof(winnerList));
+	free(args);
+	return 1;
+}
+
+
+int main(int argc, char *argv[])
+{
+	for(;;){
+		gametime(argc, argv);
+	}
 }
