@@ -276,6 +276,7 @@ int gametime(int argc, char *argv[])
 	}
 	guest_num = 0;
 	memset(winnerList, 0, sizeof(winnerList));
+	memset(winner, 0, sizeof(winner));
 	free(args);
 	return 1;
 }
