@@ -15,14 +15,19 @@
 #define BUFSIZE 4096
 pthread_barrier_t question_barrier;
 pthread_barrier_t answer_barrier;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 sem_t sem;
-pthread_mutex_t lock; 
+pthread_mutex_t lock;
 char winner[BUFSIZE];
 int winnerList[50] = {0};
 int correct = 0;
 char playerList[BUFSIZE];
 ques_t *questions[25];
 int numplayers;
+int numactiveplayers;
+int waiting = 0;
+int through = 0;
 
 typedef struct argss
 {
@@ -36,13 +41,14 @@ void read_questions(char *qfile, ques_t *q[]);
 
 char *getscores()
 {
-	printf("%s\n",playerList);
+	printf("%s\n", playerList);
 	char *results = calloc(50, sizeof(char));
 	strncpy(results, "RESULTS|1|1\n", 8);
 	int offset = 8;
 	char *localPlayerList = strdup(playerList);
 	char *playerName = strtok(localPlayerList, "|");
-	for(int i =0; i < numplayers; i++){
+	for (int i = 0; i < numplayers; i++)
+	{
 		int score = winnerList[i];
 		offset += sprintf(results + offset, "%s|%d|", playerName, score);
 		printf("player = %s score = %d\n", playerName, score);
@@ -60,7 +66,7 @@ void *playerManager(void *args)
 	int ssock = (int)_args->ssock;
 	char *nameAgain = malloc(BUFSIZE);
 	strcpy(nameAgain, _args->name);
-	pthread_mutex_lock(&lock); 
+	pthread_mutex_lock(&lock);
 	strcat(playerList, nameAgain);
 	strcat(playerList, "|");
 	pthread_mutex_unlock(&lock);
@@ -68,17 +74,36 @@ void *playerManager(void *args)
 	printf("name1=%s\n", nameAgain);
 	int currentQ = 0;
 	int semVal;
-	
 
 	/* start working for this guy */
 	for (;;)
 	{
-		pthread_barrier_wait(&question_barrier); // wait for everyone
+		// wait for everyone
+		pthread_mutex_lock(&mutex);
+		waiting++;
+		if (waiting == numactiveplayers)
+		{
+			pthread_cond_broadcast(&cond);
+		}
+		while (waiting != numactiveplayers)
+		{
+			pthread_cond_wait(&cond, &mutex);
+		}
+		pthread_mutex_unlock(&mutex);
+		pthread_mutex_lock(&lock);
+		through++;
+		if (through == numactiveplayers)
+		{
+			waiting = 0;
+			through = 0;
+		}
+		pthread_mutex_unlock(&lock);
+
 		if (questions[currentQ]->qtext == NULL)
 		{ // Quiz has ended.
-			pthread_mutex_lock(&lock); 
+			pthread_mutex_lock(&lock);
 			char *results = getscores();
-			pthread_mutex_unlock(&lock); 
+			pthread_mutex_unlock(&lock);
 			write(ssock, results, strlen(results));
 			printf("Quiz has ended.\n");
 			break;
@@ -102,27 +127,88 @@ void *playerManager(void *args)
 		if ((cc = read(ssock, response, BUFSIZE)) <= 0)
 		{
 			printf("The client has gone.\n");
+			pthread_mutex_lock(&lock);
+			numactiveplayers--;
+			pthread_mutex_unlock(&lock);
 			close(ssock);
 			break;
 		}
 		int rightWrong = strncmp((response + 4), questions[currentQ]->answer, 1);
-		
+
 		sem_getvalue(&sem, &semVal);
 		if ((rightWrong == 0) & (semVal == 1)) // correct answer
 		{
 			sem_post(&sem);
 			strcpy(winner, "WIN|");
 			strcat(winner, nameAgain);
-			winnerList[playerNumber-1]  = winnerList[playerNumber-1] + 2;
-			pthread_barrier_wait(&answer_barrier); // wait for everyone
+			winnerList[playerNumber - 1] = winnerList[playerNumber - 1] + 2;
+			// wait for everyone
+			pthread_mutex_lock(&mutex);
+			waiting++;
+			if (waiting == numactiveplayers)
+			{
+				pthread_cond_broadcast(&cond);
+			}
+			while (waiting != numactiveplayers)
+			{
+				pthread_cond_wait(&cond, &mutex);
+			}
+			pthread_mutex_unlock(&mutex);
+			pthread_mutex_lock(&lock);
+			through++;
+			if (through == numactiveplayers)
+			{
+				waiting = 0;
+				through = 0;
+			}
+			pthread_mutex_unlock(&lock);
 		}
-		else if (rightWrong == 0){
-			winnerList[playerNumber-1]  = winnerList[playerNumber-1] + 1;
-			pthread_barrier_wait(&answer_barrier); // wait for everyone
+		else if (strncmp((response + 4), "n", 1))
+		{
+			// wait for everyone
+			pthread_mutex_lock(&mutex);
+			waiting++;
+			if (waiting == numactiveplayers)
+			{
+				pthread_cond_broadcast(&cond);
+			}
+			while (waiting != numactiveplayers)
+			{
+				pthread_cond_wait(&cond, &mutex);
+			}
+			pthread_mutex_unlock(&mutex);
+			pthread_mutex_lock(&lock);
+			through++;
+			if (through == numactiveplayers)
+			{
+				waiting = 0;
+				through = 0;
+			}
+			pthread_mutex_unlock(&lock);
 		}
 		else
 		{
-			pthread_barrier_wait(&answer_barrier); // wait for everyone
+			winnerList[playerNumber - 1] = winnerList[playerNumber - 1] + 1;
+			// wait for everyone
+			pthread_mutex_lock(&mutex);
+			waiting++;
+			if (waiting == numactiveplayers)
+			{
+				pthread_cond_broadcast(&cond);
+			}
+			while (waiting != numactiveplayers)
+			{
+				pthread_cond_wait(&cond, &mutex);
+			}
+			pthread_mutex_unlock(&mutex);
+			pthread_mutex_lock(&lock);
+			through++;
+			if (through == numactiveplayers)
+			{
+				waiting = 0;
+				through = 0;
+			}
+			pthread_mutex_unlock(&lock);
 		}
 
 		// If nobody was right
@@ -159,19 +245,18 @@ int main(int argc, char *argv[])
 	int guest_num = 0;
 	int limit = QLEN;
 	arg_t *args = calloc(10, sizeof(arg_t));
-	read_questions("questions.txt", questions);
+	read_questions(argv[1], questions);
 	pthread_mutex_init(&lock, NULL);
-
 
 	switch (argc)
 	{
-	case 1:
+	case 2:
 		// No args? let the OS choose a port and tell the user
 		rport = 1;
 		break;
-	case 2:
+	case 3:
 		// User provides a port? then use it
-		service = argv[1];
+		service = argv[2];
 		break;
 	default:
 		fprintf(stderr, "usage: server [port]\n");
@@ -215,6 +300,7 @@ int main(int argc, char *argv[])
 			player_name = strtok(NULL, "|");
 			limit = atoi(strtok(NULL, "\r\n")); // limit is the number of players
 			numplayers = limit;
+			numactiveplayers = limit;
 			pthread_barrier_init(&question_barrier, NULL, limit);
 			pthread_barrier_init(&answer_barrier, NULL, limit);
 			sem_init(&sem, 0, 1);
