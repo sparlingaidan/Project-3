@@ -226,6 +226,7 @@ int gametime(int argc, char *argv[])
 		int inital_score = 0;
 
 		if (guest_num > limit){
+			close(msock);
 			sem_wait(&gameEnd);
 			break;
 		}
@@ -268,11 +269,6 @@ int gametime(int argc, char *argv[])
 			strcpy(args[guest_num].name, player_name);
 			args[guest_num].ssock = ssock;
 			args[guest_num].playerNum = guest_num;
-		}
-		else
-		{
-			write(ssock, "QS|FULL\r\n", 9);
-			continue;
 		}
 		write(ssock, "WAIT\r\n", 6);
 		pthread_create(&thr, NULL, playerManager, (void *)&args[guest_num]);
